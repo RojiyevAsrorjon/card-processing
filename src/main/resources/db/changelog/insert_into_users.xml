@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="users_1" author="RojiyevAsrorjon">
+        <insert tableName="users">
+            <column name="firstname" value="Asrorjon"/>
+            <column name="lastname" value="Rojiyev"/>
+            <column name="phone_number" value="+998990017887"/>
+            <column name="password" value="$2a$12$3/DO5Dl0M81HXdfAPAA8NupiY3b9US3.llikiIoab/oyqtb7wL57K"/>
+            <column name="role_id" value="1"/>
+        </insert>
+    </changeSet>
+    <changeSet id="users_2" author="RojiyevAsrorjon">
+        <insert tableName="users">
+            <column name="firstname" value="Axrorjon"/>
+            <column name="lastname" value="Rojiyev"/>
+            <column name="phone_number" value="+998940077887"/>
+            <column name="password" value="$2a$12$cO6uBqpZc8xOJ.3XR7qv4OJp/TyyRHHJ4jSPPgXCpA2sgC06NCxUe"/>
+            <column name="role_id" value="2"/>
+        </insert>
+    </changeSet>
+    <changeSet id="users_3" author="RojiyevAsrorjon">
+        <insert tableName="users">
+            <column name="firstname" value="Abrorjon"/>
+            <column name="lastname" value="Rojiyev"/>
+            <column name="phone_number" value="+998981807887"/>
+            <column name="password" value="$2a$12$VezEBzrB6FEhH1CtSDCCDOSO4K12anUaXA/AbDwNdW7W9GXTlu6fy"/>
+            <column name="role_id" value="2"/>
+        </insert>
+    </changeSet>
+</databaseChangeLog>
