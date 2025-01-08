@@ -43,6 +43,7 @@ import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -123,6 +124,14 @@ public class CardServiceImpl implements CardService {
             logger.error("Card with this id not found: {}", cardId);
             throw new NotFoundException(messageSource.getMessage("error.card_not_found", null, locale));
         }
+        Card card = optionalCard.get();
+        if (LocalDate.parse("01/" + card.getExpirationDate(), DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                .isBefore(LocalDate.now().withDayOfMonth(1))) {
+            card.setStatus(Status.CLOSED.name());
+            Card savedCard = cardRepository.save(card);
+            CardResponse cardResponse = cardMapper.toResponse(savedCard);
+            return new DataDto<>(cardResponse);
+        }
         CardResponse cardResponse = cardMapper.toResponse(optionalCard.get());
         return new DataDto<>(cardResponse);
     }
@@ -142,8 +151,7 @@ public class CardServiceImpl implements CardService {
             Card blockedCard = cardRepository.save(card);
             CardResponse cardResponse = cardMapper.toResponse(blockedCard);
             return new DataDto<>(cardResponse);
-        }
-        else throw new BadRequestException("Card status is not active!");
+        } else throw new BadRequestException("Card status is not active!");
 
     }
 
@@ -160,18 +168,72 @@ public class CardServiceImpl implements CardService {
             Card card = optionalCard.get();
             card.setStatus(Status.ACTIVE.name());
             cardRepository.save(card);
-        }
-        else throw new BadRequestException("Card status is not blocked!");
+        } else throw new BadRequestException("Card status is not blocked!");
 
     }
 
     @Override
     public DataDto<TransactionResponse> debit(UUID cardId, TransactionDto transactionDto, UUID idempotencyKey, String mobileLang) {
+        return doTransaction(cardId, transactionDto, idempotencyKey, mobileLang, "debit");
+
+//        Locale locale = Locale.forLanguageTag(mobileLang);
+//        logger.info("User try to debit : {}", cardId);
+//        Optional<IdEmPotency> optionalIdEmPotency = idEmPotencyRepository.findByIdEmPotencyKey(idempotencyKey);
+//        if (optionalIdEmPotency.isPresent()) {
+//            Transaction transaction = transactionRepository.findById(optionalIdEmPotency.get().getCardId())
+//                    .orElseThrow(() -> {
+//                        logger.error("with this IdEmPotency transaction available: {}. IdEmPotency id: {}", transactionDto.getExternalId(), idempotencyKey);
+//
+//                        return new RuntimeException(messageSource.getMessage("error.id_em_potency_key_card_not_found", null, locale));
+//                    });
+//            TransactionResponse transactionResponse = transactionMapper.toResponse(transaction);
+//            return new DataDto<>(transactionResponse);
+//        }
+//        Optional<Card> optionalCard = cardRepository.findById(cardId);
+//        if (optionalCard.isEmpty()) {
+//            logger.error("Card with this id not found: {}", cardId);
+//            throw new NotFoundException(messageSource.getMessage("error.card_not_found", null, locale));
+//        }
+//
+//        if (optionalCard.get().getBalance().compareTo(BigDecimal.valueOf(transactionDto.getAmount())) < 0) {
+//            throw new BadRequestException(messageSource.getMessage("error.insufficient_fund", null, locale));
+//        }
+//
+//        Card card = optionalCard.get();
+//        card.setBalance(card.getBalance().subtract(BigDecimal.valueOf(transactionDto.getAmount())));
+//        Card savedCard = cardRepository.save(card);
+//        logger.info("Card - debit new balance: {}", card.getBalance());
+//
+//        Timestamp createdAt = new Timestamp(System.currentTimeMillis());
+//        Transaction transaction = transactionMapper.toEntity(transactionDto);
+//        transaction.setId(UUID.randomUUID());
+//        transaction.setType(TransactionType.CREDIT.name());
+//        transaction.setCardId(cardId);
+//        transaction.setAfterBalance(savedCard.getBalance().longValue());
+//        transaction.setExchangeRate(currencyService.getCurrencyRateById());
+//        transaction.setCreatedAt(createdAt);
+//
+//        IdEmPotency idEmPotency = new IdEmPotency();
+//        idEmPotency.setIdEmPotencyKey(idempotencyKey);
+//        idEmPotency.setCardId(cardId);
+//        idEmPotencyRepository.save(idEmPotency);
+//
+//        Transaction savedTransaction = transactionRepository.save(transaction);
+//        logger.info("Card - debit transaction id: {}", savedTransaction.getId());
+//
+//        TransactionResponse transactionResponse = transactionMapper.toResponse(savedTransaction);
+//
+//        return new DataDto<>(transactionResponse);
+    }
+
+    private DataDto<TransactionResponse> doTransaction(UUID cardId, TransactionDto transactionDto, UUID idempotencyKey, String mobileLang, String type) {
         Locale locale = Locale.forLanguageTag(mobileLang);
-        logger.info("User try to debit : {}", cardId);
+
+        logger.info("User try to do transaction " + type + " : {}", cardId);
+
         Optional<IdEmPotency> optionalIdEmPotency = idEmPotencyRepository.findByIdEmPotencyKey(idempotencyKey);
         if (optionalIdEmPotency.isPresent()) {
-            Transaction transaction = transactionRepository.findById(optionalIdEmPotency.get().getCardId())
+            Transaction transaction = transactionRepository.findById(optionalIdEmPotency.get().getTransactionId())
                     .orElseThrow(() -> {
                         logger.error("with this IdEmPotency transaction available: {}. IdEmPotency id: {}", transactionDto.getExternalId(), idempotencyKey);
 
@@ -180,23 +242,31 @@ public class CardServiceImpl implements CardService {
             TransactionResponse transactionResponse = transactionMapper.toResponse(transaction);
             return new DataDto<>(transactionResponse);
         }
+
         Optional<Card> optionalCard = cardRepository.findById(cardId);
         if (optionalCard.isEmpty()) {
             logger.error("Card with this id not found: {}", cardId);
             throw new NotFoundException(messageSource.getMessage("error.card_not_found", null, locale));
         }
 
-        if (optionalCard.get().getBalance().compareTo(BigDecimal.valueOf(transactionDto.getAmount())) <0) {
+
+        if (type.equals("debit") && optionalCard.get().getBalance().compareTo(BigDecimal.valueOf(transactionDto.getAmount())) < 0) {
             throw new BadRequestException(messageSource.getMessage("error.insufficient_fund", null, locale));
         }
 
+
         Card card = optionalCard.get();
-        card.setBalance(card.getBalance().subtract(BigDecimal.valueOf(transactionDto.getAmount())));
+        if (type.equals("debit")) {
+            card.setBalance(card.getBalance().subtract(BigDecimal.valueOf(transactionDto.getAmount())));
+        } else {
+            card.setBalance(card.getBalance().add(BigDecimal.valueOf(transactionDto.getAmount())));
+        }
         Card savedCard = cardRepository.save(card);
-        logger.info("Card - debit new balance: {}", card.getBalance());
+        logger.info("Card  new balance: {}", card.getBalance());
 
         Timestamp createdAt = new Timestamp(System.currentTimeMillis());
         Transaction transaction = transactionMapper.toEntity(transactionDto);
+
         transaction.setId(UUID.randomUUID());
         transaction.setType(TransactionType.CREDIT.name());
         transaction.setCardId(cardId);
@@ -204,14 +274,15 @@ public class CardServiceImpl implements CardService {
         transaction.setExchangeRate(currencyService.getCurrencyRateById());
         transaction.setCreatedAt(createdAt);
 
+
+
+        Transaction savedTransaction = transactionRepository.save(transaction);
+        logger.info("Card - transaction id: {}", savedTransaction.getId());
         IdEmPotency idEmPotency = new IdEmPotency();
         idEmPotency.setIdEmPotencyKey(idempotencyKey);
         idEmPotency.setCardId(cardId);
+        idEmPotency.setTransactionId(savedTransaction.getId());
         idEmPotencyRepository.save(idEmPotency);
-
-        Transaction savedTransaction = transactionRepository.save(transaction);
-        logger.info("Card - debit transaction id: {}", savedTransaction.getId());
-
         TransactionResponse transactionResponse = transactionMapper.toResponse(savedTransaction);
 
         return new DataDto<>(transactionResponse);
@@ -219,52 +290,55 @@ public class CardServiceImpl implements CardService {
 
     @Override
     public DataDto<TransactionResponse> credit(UUID cardId, TransactionDto transactionDto, UUID idempotencyKey, String mobileLang) {
-        Locale locale = Locale.forLanguageTag(mobileLang);
-        logger.info("User try to credit : {}", cardId);
+        return doTransaction(cardId, transactionDto, idempotencyKey, mobileLang, "credit");
 
-        Optional<IdEmPotency> optionalIdEmPotency = idEmPotencyRepository.findByIdEmPotencyKey(idempotencyKey);
-        if (optionalIdEmPotency.isPresent()) {
-            Transaction transaction = transactionRepository.findById(optionalIdEmPotency.get().getCardId())
-                    .orElseThrow(() -> {
-                        logger.error("with this IdEmPotency transaction available: {}. IdEmPotency id: {}", transactionDto.getExternalId(), idempotencyKey);
-
-                        return new RuntimeException(messageSource.getMessage("error.id_em_potency_key_card_not_found", null, locale));
-                    });
-            TransactionResponse transactionResponse = transactionMapper.toResponse(transaction);
-            return new DataDto<>(transactionResponse);
-        }
-
-        Optional<Card> optionalCard = cardRepository.findById(cardId);
-        if (optionalCard.isEmpty()) {
-            logger.error("Card with this id not found: {}", cardId);
-            throw new NotFoundException(messageSource.getMessage("error.card_not_found", null, locale));
-        }
-
-        Card card = optionalCard.get();
-        card.setBalance(card.getBalance().add(BigDecimal.valueOf(transactionDto.getAmount())));
-        Card savedCard = cardRepository.save(card);
-        logger.info("Card - debit new balance: {}", card.getBalance());
-
-        Timestamp createdAt = new Timestamp(System.currentTimeMillis());
-        Transaction transaction = transactionMapper.toEntity(transactionDto);
-
-        transaction.setId(UUID.randomUUID());
-        transaction.setType(TransactionType.CREDIT.name());
-        transaction.setCardId(cardId);
-        transaction.setAfterBalance(savedCard.getBalance().longValue());
-        transaction.setExchangeRate(currencyService.getCurrencyRateById());
-        transaction.setCreatedAt(createdAt);
-
-        IdEmPotency idEmPotency = new IdEmPotency();
-        idEmPotency.setIdEmPotencyKey(idempotencyKey);
-        idEmPotency.setCardId(cardId);
-        idEmPotencyRepository.save(idEmPotency);
-
-        Transaction savedTransaction = transactionRepository.save(transaction);
-        logger.info("Card - debit transaction id: {}", savedTransaction.getId());
-        TransactionResponse transactionResponse = transactionMapper.toResponse(savedTransaction);
-
-        return new DataDto<>(transactionResponse);
+//        Locale locale = Locale.forLanguageTag(mobileLang);
+//
+//        logger.info("User try to credit : {}", cardId);
+//
+//        Optional<IdEmPotency> optionalIdEmPotency = idEmPotencyRepository.findByIdEmPotencyKey(idempotencyKey);
+//        if (optionalIdEmPotency.isPresent()) {
+//            Transaction transaction = transactionRepository.findById(optionalIdEmPotency.get().getCardId())
+//                    .orElseThrow(() -> {
+//                        logger.error("with this IdEmPotency transaction available: {}. IdEmPotency id: {}", transactionDto.getExternalId(), idempotencyKey);
+//
+//                        return new RuntimeException(messageSource.getMessage("error.id_em_potency_key_card_not_found", null, locale));
+//                    });
+//            TransactionResponse transactionResponse = transactionMapper.toResponse(transaction);
+//            return new DataDto<>(transactionResponse);
+//        }
+//
+//        Optional<Card> optionalCard = cardRepository.findById(cardId);
+//        if (optionalCard.isEmpty()) {
+//            logger.error("Card with this id not found: {}", cardId);
+//            throw new NotFoundException(messageSource.getMessage("error.card_not_found", null, locale));
+//        }
+//
+//        Card card = optionalCard.get();
+//        card.setBalance(card.getBalance().add(BigDecimal.valueOf(transactionDto.getAmount())));
+//        Card savedCard = cardRepository.save(card);
+//        logger.info("Card - debit new balance: {}", card.getBalance());
+//
+//        Timestamp createdAt = new Timestamp(System.currentTimeMillis());
+//        Transaction transaction = transactionMapper.toEntity(transactionDto);
+//
+//        transaction.setId(UUID.randomUUID());
+//        transaction.setType(TransactionType.CREDIT.name());
+//        transaction.setCardId(cardId);
+//        transaction.setAfterBalance(savedCard.getBalance().longValue());
+//        transaction.setExchangeRate(currencyService.getCurrencyRateById());
+//        transaction.setCreatedAt(createdAt);
+//
+//        IdEmPotency idEmPotency = new IdEmPotency();
+//        idEmPotency.setIdEmPotencyKey(idempotencyKey);
+//        idEmPotency.setCardId(cardId);
+//        idEmPotencyRepository.save(idEmPotency);
+//
+//        Transaction savedTransaction = transactionRepository.save(transaction);
+//        logger.info("Card - debit transaction id: {}", savedTransaction.getId());
+//        TransactionResponse transactionResponse = transactionMapper.toResponse(savedTransaction);
+//
+//        return new DataDto<>(transactionResponse);
     }
 
     @Override
@@ -279,12 +353,13 @@ public class CardServiceImpl implements CardService {
 
         Pageable pageable = PageRequest.of(page, size);
         Page<Transaction> all = transactionRepository.findAll(pageable);
-        List<TransactionResponse> transactionResponses= all.getContent().stream()
+        List<TransactionResponse> transactionResponses = all.getContent().stream()
                 .map(transactionMapper::toResponse)
                 .toList();
         Page<TransactionResponse> responses = new PageImpl<>(transactionResponses, pageable, all.getContent().size());
         return new DataDto<>(responses);
     }
+
     private String generateCardNumber() {
         return "9680 0204 " + (1000 + (int) (Math.random() + 9000)) + " " + (1000 + (int) (Math.random() + 9000));
     }

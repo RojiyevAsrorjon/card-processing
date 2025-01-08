@@ -24,4 +24,5 @@ public class IdEmPotency {
 
     private UUID idEmPotencyKey;
     private UUID cardId;
+    private UUID transactionId;
 }

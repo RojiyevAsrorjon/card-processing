@@ -11,4 +11,5 @@
     <include file="/db/changelog/create_cards_table.xml"/>
     <include file="/db/changelog/create_transactions_table.xml"/>
     <include file="/db/changelog/create_id_em_potency_table.xml"/>
+    <include file="/db/changelog/add_column_to_id_em.xml"/>
 </databaseChangeLog>
